@@ -13,6 +13,7 @@ from .config import get_settings
 from .currency import bucket_for
 from .db import session_scope
 from .feeds.base import PriceFeed
+from .feeds.binance import BinanceFeed
 from .feeds.coingecko import CoinGeckoFeed
 from .feeds.stooq import StooqFeed
 from .models import Account, Instrument, ManualPosition, Position, PriceHistory, Snapshot, SyncRun
@@ -26,6 +27,7 @@ def get_feeds() -> dict[str, PriceFeed]:
     return {
         "coingecko": CoinGeckoFeed(),
         "stooq": StooqFeed(),
+        "binance": BinanceFeed(),
     }
 
 
@@ -45,6 +47,9 @@ def _vs_currency_for(feed_name: str, quote_currency: str) -> str:
         # CoinGecko vs_currency 'usd' covers both USD and USDT for our purposes.
         if quote_currency.upper() in {"USDT", "USDC", "BUSD", "FDUSD", "USD"}:
             return "usd"
+        return quote_currency.lower()
+    if feed_name == "binance":
+        # Symbol already encodes the pair (e.g. BTCUSDT); vs_currency is unused.
         return quote_currency.lower()
     # Stooq returns price in the instrument's listed currency; vs_currency unused.
     return quote_currency.lower()

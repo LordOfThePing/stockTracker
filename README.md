@@ -15,7 +15,9 @@ Personal-use, **localhost-only** portfolio tracker. Crypto via Binance (read-onl
 ```powershell
 copy .env.example .env
 # (Optional, Phase 2) edit .env and add your read-only Binance API key + secret
-docker compose up --build
+make dev          # foreground, follows logs
+# or
+make deploy       # background (detached); survives terminal close
 ```
 
 Then visit:
@@ -23,9 +25,27 @@ Then visit:
 - UI: <http://127.0.0.1:3000>
 - API: <http://127.0.0.1:8000/docs>
 
+If you don't have `make` on Windows, the equivalents are:
+
+```powershell
+docker compose up --build         # = make dev
+docker compose build; docker compose up -d   # = make deploy
+docker compose down               # = make down
+docker compose logs -f --tail=100 # = make logs
+```
+
+Install `make` via `choco install make` or `scoop install make`. Run `make help` for the full target list.
+
 ## Native dev (alternate)
 
-Backend:
+```powershell
+make setup           # creates backend/.venv, runs npm install, applies migrations
+make backend-dev     # uvicorn --reload on 127.0.0.1:8000
+make frontend-dev    # next dev on 0.0.0.0:3000 (in a second terminal)
+make test            # run pytest
+```
+
+Or without make:
 
 ```powershell
 cd backend
@@ -35,8 +55,6 @@ pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-
-Frontend (separate terminal):
 
 ```powershell
 cd frontend
