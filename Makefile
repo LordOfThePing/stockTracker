@@ -26,8 +26,8 @@ COMPOSE := docker compose
         clean clean-data
 
 help: ## Show this help
-	@printf "\nTracker — make targets:\n\n"
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@printf "\nTracker - make targets:\n\n"
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\n"
 
 # ============================================================================
