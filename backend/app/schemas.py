@@ -48,6 +48,10 @@ class ManualPositionIn(BaseModel):
 
 
 class ManualPositionPatch(BaseModel):
+    account_label: str | None = None
+    symbol: str | None = None
+    asset_type: AssetType | None = None
+    quote_currency: str | None = None
     quantity: Decimal | None = None
     cost_basis_per_unit: Decimal | None = None
     cost_basis_currency: str | None = None
@@ -70,6 +74,7 @@ class PositionOut(BaseModel):
     pnl_absolute: Decimal | None
     pnl_pct: float | None
     as_of_utc: datetime
+    manual_position_id: int | None = None
 
 
 class BucketSubtotal(BaseModel):

@@ -36,7 +36,9 @@ def get_adapters(db: Session, *, include_binance: bool | None = None) -> list[So
     if include_binance is None:
         include_binance = settings.binance_enabled
 
-    adapters: list[SourceAdapter] = [ManualAdapter(db), MockAdapter()]
+    adapters: list[SourceAdapter] = [ManualAdapter(db)]
+    if settings.enable_mock:
+        adapters.append(MockAdapter())
     if include_binance:
         adapters.append(BinanceAdapter())
     return adapters
@@ -144,6 +146,18 @@ def _upsert_position(db: Session, np: NormalizedPosition, inst: Instrument) -> N
         pos.as_of_utc = np.as_of_utc
 
 
+def _prune_stale_positions(
+    db: Session,
+    venue_id: str,
+    keep_keys: set[tuple[str, int]],
+) -> None:
+    existing = db.query(Position).filter(Position.source_venue == venue_id).all()
+    for pos in existing:
+        key = (pos.account_label, pos.instrument_id)
+        if key not in keep_keys:
+            db.delete(pos)
+
+
 def _write_snapshots(db: Session) -> None:
     now = datetime.now(timezone.utc)
     rows = (
@@ -185,10 +199,13 @@ async def run_sync(venue: str | None = None) -> dict[str, str]:
             db.flush()
             try:
                 positions = await adapter.fetch_positions()
+                keep_keys: set[tuple[str, int]] = set()
                 for np in positions:
                     inst = _ensure_instrument(db, np)
+                    keep_keys.add((np.account_label, inst.id))
                     _upsert_account(db, np.source_venue, np.account_label)
                     _upsert_position(db, np, inst)
+                _prune_stale_positions(db, adapter.venue_id, keep_keys)
                 run.status = "ok"
                 results[adapter.venue_id] = "ok"
             except NotImplementedError as e:

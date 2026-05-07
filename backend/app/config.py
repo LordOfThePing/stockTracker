@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     binance_api_key: str = ""
     binance_api_secret: str = ""
 
+    enable_mock: bool = False
+
     @property
     def binance_enabled(self) -> bool:
         return bool(self.binance_api_key and self.binance_api_secret)

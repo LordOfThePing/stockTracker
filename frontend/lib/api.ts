@@ -42,6 +42,7 @@ export type Position = {
   pnl_absolute: string | null;
   pnl_pct: number | null;
   as_of_utc: string;
+  manual_position_id: number | null;
 };
 
 export type HistoryPoint = { ts_utc: string; total_value: string };
@@ -70,6 +71,22 @@ async function jpost<T>(path: string, body?: unknown): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+async function jpatch<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json() as Promise<T>;
+}
+
+async function jdelete<T>(path: string): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json() as Promise<T>;
+}
+
 export const api = {
   overview: () => jget<Overview>("/api/overview"),
   positions: (qs?: Record<string, string>) =>
@@ -81,4 +98,21 @@ export const api = {
   searchInstruments: (q: string, feed: string) =>
     jget<InstrumentSearchResult[]>(`/api/instruments/search?q=${encodeURIComponent(q)}&feed=${feed}`),
   createManual: (body: unknown) => jpost<{ id: number }>("/api/manual/positions", body),
+  listManual: () => jget<ManualPositionRow[]>("/api/manual/positions"),
+  patchManual: (id: number, body: unknown) => jpatch<{ id: number }>(`/api/manual/positions/${id}`, body),
+  deleteManual: (id: number) => jdelete<{ ok: boolean }>(`/api/manual/positions/${id}`),
+  purgeVenue: (venue: string) => jdelete<Record<string, unknown>>(`/api/admin/venue/${venue}`),
+};
+
+export type ManualPositionRow = {
+  id: number;
+  symbol: string;
+  feed: string;
+  feed_symbol: string;
+  quantity: string;
+  cost_basis_per_unit: string;
+  cost_basis_currency: string;
+  account_label: string;
+  opened_at: string | null;
+  notes: string | null;
 };

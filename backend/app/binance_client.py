@@ -93,7 +93,7 @@ class BinanceClient:
         r = await self._do_request("GET", f"{self.base_url}{path}", params=params)
         return r.json()
 
-    async def signed_get(self, path: str, params: dict | None = None) -> dict | list:
+    async def _signed_request(self, method: str, path: str, params: dict | None = None) -> dict | list:
         # https://binance-docs.github.io/apidocs/spot/en/#signed-trade-user_data-and-margin-endpoints
         if not self.api_key or not self.api_secret:
             raise RuntimeError("Binance signed endpoint requires API key + secret.")
@@ -103,5 +103,11 @@ class BinanceClient:
         query = urllib.parse.urlencode(params)
         signature = sign_query(self.api_secret, query)
         url = f"{self.base_url}{path}?{query}&signature={signature}"
-        r = await self._do_request("GET", url, headers={"X-MBX-APIKEY": self.api_key})
+        r = await self._do_request(method, url, headers={"X-MBX-APIKEY": self.api_key})
         return r.json()
+
+    async def signed_get(self, path: str, params: dict | None = None) -> dict | list:
+        return await self._signed_request("GET", path, params)
+
+    async def signed_post(self, path: str, params: dict | None = None) -> dict | list:
+        return await self._signed_request("POST", path, params)

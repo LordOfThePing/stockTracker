@@ -26,9 +26,8 @@ COMPOSE := docker compose
         clean clean-data
 
 help: ## Show this help
-	@printf "\nTracker - make targets:\n\n"
+	@echo Tracker - make targets:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf "\n"
 
 # ============================================================================
 # Docker stack — primary path; binds services to 127.0.0.1 only.
@@ -40,7 +39,7 @@ dev: ## docker compose up --build (foreground, follows logs)
 deploy: ## docker compose build + up -d (background; still localhost-only)
 	$(COMPOSE) build
 	$(COMPOSE) up -d
-	@printf "\nTracker is running.\n  UI:  http://127.0.0.1:3000\n  API: http://127.0.0.1:8000/docs\n\n"
+	@echo Tracker running. UI http://127.0.0.1:3000  --  API http://127.0.0.1:8000/docs
 
 build: ## (re)build images without starting
 	$(COMPOSE) build
@@ -59,6 +58,8 @@ logs: ## tail logs from both services
 
 ps: ## show service status
 	$(COMPOSE) ps
+
+redeploy: down deploy logs
 
 # ============================================================================
 # Native dev (alternate path; runs uvicorn + next dev outside Docker).
@@ -108,6 +109,13 @@ refresh-manual: ## POST /api/refresh/manual
 
 keys-check: ## report whether Binance keys are configured (NEVER prints values)
 	@cd backend && $(VENV_PY) -c "from app.config import get_settings; print('binance_enabled:', get_settings().binance_enabled)"
+
+purge-mock: ## delete all mock-sourced positions/accounts/sync_runs from the DB
+	curl -fsS -X DELETE http://127.0.0.1:8000/api/admin/venue/mock && echo
+
+purge-venue: ## delete all rows for VENUE=<name> (e.g. make purge-venue VENUE=mock)
+	@if [ -z "$(VENUE)" ]; then echo "usage: make purge-venue VENUE=<name>"; exit 1; fi
+	curl -fsS -X DELETE http://127.0.0.1:8000/api/admin/venue/$(VENUE) && echo
 
 # ============================================================================
 # Cleanup

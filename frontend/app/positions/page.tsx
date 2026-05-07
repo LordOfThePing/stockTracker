@@ -16,6 +16,35 @@ function pct(p: number | null) {
   return `${(p * 100).toFixed(2)}%`;
 }
 
+function providerFromLabel(r: Position) {
+  if (r.source_venue !== "manual") {
+    return r.source_venue;
+  }
+  const raw = (r.account_label ?? "").trim();
+  if (!raw || raw === "manual") {
+    return "manual";
+  }
+  const parts = raw.split("::");
+  if (parts.length === 2) {
+    return parts[1].trim() || parts[0].trim() || "manual";
+  }
+  return raw;
+}
+
+function packProvider(provider: string) {
+  return provider.trim() || "manual";
+}
+
+function providerLabel(r: Position) {
+  return providerFromLabel(r);
+}
+
+function num(v: string | number | null) {
+  if (v === null) return null;
+  const n = typeof v === "string" ? Number(v) : v;
+  return Number.isNaN(n) ? null : n;
+}
+
 function toCsv(rows: Position[]): string {
   const cols = [
     "symbol", "source_venue", "account_label", "asset_type",
@@ -31,14 +60,34 @@ function toCsv(rows: Position[]): string {
   return `${head}\n${body}`;
 }
 
+type EditState = {
+  manualId: number;
+  provider: string;
+  symbol: string;
+  assetType: string;
+  quoteCurrency: string;
+  quantity: string;
+  costBasis: string;
+  costCurrency: string;
+  notes: string;
+};
+
 export default function PositionsPage() {
   const [rows, setRows] = useState<Position[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    api.positions().then(setRows).catch((e) => setErr(String(e)));
-  }, []);
+  async function load() {
+    try {
+      setRows(await api.positions());
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   const visible = useMemo(() => {
     if (!rows) return [];
@@ -46,10 +95,28 @@ export default function PositionsPage() {
     if (!f) return rows;
     return rows.filter((r) =>
       r.symbol.toLowerCase().includes(f) ||
-      r.source_venue.toLowerCase().includes(f) ||
+      providerLabel(r).toLowerCase().includes(f) ||
+      r.asset_type.toLowerCase().includes(f) ||
       r.currency_bucket.toLowerCase().includes(f)
     );
   }, [rows, filter]);
+
+  const totals = useMemo(() => {
+    let cost = 0;
+    let value = 0;
+    let pnl = 0;
+    for (const r of visible) {
+      const qty = num(r.quantity);
+      const unitCost = num(r.cost_basis_per_unit);
+      const marketValue = num(r.market_value);
+      const pnlAbs = num(r.pnl_absolute);
+      if (qty !== null && unitCost !== null) cost += qty * unitCost;
+      if (marketValue !== null) value += marketValue;
+      if (pnlAbs !== null) pnl += pnlAbs;
+    }
+    const pnlPct = cost > 0 ? pnl / cost : null;
+    return { cost, value, pnl, pnlPct };
+  }, [visible]);
 
   function downloadCsv() {
     const blob = new Blob([toCsv(visible)], { type: "text/csv" });
@@ -61,6 +128,57 @@ export default function PositionsPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleDelete(r: Position) {
+    if (!r.manual_position_id) return;
+    if (!confirm(`Delete manual position ${r.symbol}?`)) return;
+    try {
+      await api.deleteManual(r.manual_position_id);
+      await api.refresh("manual");
+      await load();
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+
+  function startEdit(r: Position) {
+    if (!r.manual_position_id) return;
+    setEditing({
+      manualId: r.manual_position_id,
+      provider: providerFromLabel(r),
+      symbol: r.symbol,
+      assetType: r.asset_type,
+      quoteCurrency: r.quote_currency,
+      quantity: r.quantity,
+      costBasis: r.cost_basis_per_unit ?? "",
+      costCurrency: r.cost_basis_currency ?? "",
+      notes: "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setBusy(true);
+    try {
+      await api.patchManual(editing.manualId, {
+        account_label: packProvider(editing.provider),
+        symbol: editing.symbol,
+        asset_type: editing.assetType,
+        quote_currency: editing.quoteCurrency,
+        quantity: editing.quantity,
+        cost_basis_per_unit: editing.costBasis,
+        cost_basis_currency: editing.costCurrency,
+        notes: editing.notes || null,
+      });
+      await api.refresh("manual");
+      setEditing(null);
+      await load();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (err) return <p className="text-red-600 font-mono text-sm">{err}</p>;
   if (!rows) return <p className="text-ink-500 text-sm">loading…</p>;
 
@@ -70,7 +188,7 @@ export default function PositionsPage() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="filter by symbol, venue, bucket"
+          placeholder="filter by symbol, provider, type, bucket"
           className="flex-1 rounded border border-ink-200 bg-white px-3 py-2 text-sm font-mono"
         />
         <button onClick={downloadCsv} className="rounded border border-ink-300 bg-white px-3 py-2 text-sm hover:bg-ink-50">
@@ -86,7 +204,8 @@ export default function PositionsPage() {
           <thead>
             <tr className="text-left text-ink-500 border-b border-ink-200">
               <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="px-3 py-2 font-medium">Venue</th>
+              <th className="px-3 py-2 font-medium">Provider</th>
+              <th className="px-3 py-2 font-medium">Asset Type</th>
               <th className="px-3 py-2 font-medium">Bucket</th>
               <th className="px-3 py-2 font-medium text-right">Qty</th>
               <th className="px-3 py-2 font-medium text-right">Mark</th>
@@ -94,16 +213,19 @@ export default function PositionsPage() {
               <th className="px-3 py-2 font-medium text-right">Value</th>
               <th className="px-3 py-2 font-medium text-right">P/L</th>
               <th className="px-3 py-2 font-medium text-right">P/L %</th>
+              <th className="px-3 py-2 font-medium text-right w-20"></th>
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => {
               const pnl = r.pnl_absolute !== null ? Number(r.pnl_absolute) : null;
               const pnlClass = pnl === null ? "" : pnl >= 0 ? "text-emerald-700" : "text-red-700";
+              const isManual = r.source_venue === "manual" && r.manual_position_id !== null;
               return (
-                <tr key={r.id} className="border-b border-ink-100 last:border-0 font-mono">
+                <tr key={`${r.source_venue}-${r.id}`} className="border-b border-ink-100 last:border-0 font-mono">
                   <td className="px-3 py-2">{r.symbol}</td>
-                  <td className="px-3 py-2 text-ink-500">{r.source_venue}</td>
+                  <td className="px-3 py-2 text-ink-500">{providerLabel(r)}</td>
+                  <td className="px-3 py-2 text-ink-500">{r.asset_type}</td>
                   <td className="px-3 py-2 text-ink-500">{r.currency_bucket}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.quantity)}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.mark_price)}</td>
@@ -111,15 +233,108 @@ export default function PositionsPage() {
                   <td className="px-3 py-2 text-right">{fmt(r.market_value)}</td>
                   <td className={`px-3 py-2 text-right ${pnlClass}`}>{fmt(r.pnl_absolute)}</td>
                   <td className={`px-3 py-2 text-right ${pnlClass}`}>{pct(r.pnl_pct)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {isManual && (
+                      <span className="inline-flex gap-2">
+                        <button onClick={() => startEdit(r)}
+                          className="text-xs text-ink-500 hover:text-ink-900" title="edit">edit</button>
+                        <button onClick={() => handleDelete(r)}
+                          className="text-xs text-ink-500 hover:text-red-700" title="delete">×</button>
+                      </span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
+            {visible.length > 0 && (
+              <tr className="font-mono bg-ink-50/60 border-t border-ink-200">
+                <td className="px-3 py-2 text-ink-700" colSpan={6}>Totals</td>
+                <td className="px-3 py-2 text-right">{fmt(totals.cost)}</td>
+                <td className="px-3 py-2 text-right">{fmt(totals.value)}</td>
+                <td className={`px-3 py-2 text-right ${totals.pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>{fmt(totals.pnl)}</td>
+                <td className={`px-3 py-2 text-right ${totals.pnlPct === null ? "" : totals.pnlPct >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pct(totals.pnlPct)}</td>
+                <td className="px-3 py-2"></td>
+              </tr>
+            )}
             {visible.length === 0 && (
-              <tr><td colSpan={9} className="px-3 py-3 text-ink-400 text-center">no positions</td></tr>
+              <tr><td colSpan={11} className="px-3 py-3 text-ink-400 text-center">no positions</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-ink-900/40 flex items-center justify-center z-10" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded shadow-lg p-5 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-mono text-sm">Edit manual position: {editing.symbol}</h2>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Provider</div>
+              <input value={editing.provider}
+                onChange={(e) => setEditing({ ...editing, provider: e.target.value })}
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">
+                <div className="text-ink-500 mb-1">Symbol</div>
+                <input value={editing.symbol}
+                  onChange={(e) => setEditing({ ...editing, symbol: e.target.value.toUpperCase() })}
+                  className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+              </label>
+              <label className="block text-sm">
+                <div className="text-ink-500 mb-1">Asset type</div>
+                <select value={editing.assetType}
+                  onChange={(e) => setEditing({ ...editing, assetType: e.target.value })}
+                  className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono">
+                  <option value="crypto">crypto</option>
+                  <option value="equity">equity</option>
+                  <option value="other">other</option>
+                </select>
+              </label>
+            </div>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Quote currency</div>
+              <input value={editing.quoteCurrency}
+                onChange={(e) => setEditing({ ...editing, quoteCurrency: e.target.value.toUpperCase() })}
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Quantity</div>
+              <input value={editing.quantity}
+                onChange={(e) => setEditing({ ...editing, quantity: e.target.value })}
+                inputMode="decimal"
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Cost basis (per unit)</div>
+              <input value={editing.costBasis}
+                onChange={(e) => setEditing({ ...editing, costBasis: e.target.value })}
+                inputMode="decimal"
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Cost basis currency</div>
+              <input value={editing.costCurrency}
+                onChange={(e) => setEditing({ ...editing, costCurrency: e.target.value.toUpperCase() })}
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <label className="block text-sm">
+              <div className="text-ink-500 mb-1">Notes</div>
+              <textarea value={editing.notes}
+                onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                rows={2}
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono" />
+            </label>
+            <div className="flex gap-2 justify-end pt-2">
+              <button onClick={() => setEditing(null)}
+                className="rounded border border-ink-300 bg-white px-3 py-1.5 text-sm hover:bg-ink-50">cancel</button>
+              <button onClick={saveEdit} disabled={busy}
+                className="rounded bg-ink-900 px-3 py-1.5 text-sm text-white hover:bg-ink-800 disabled:opacity-50">
+                {busy ? "saving…" : "save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

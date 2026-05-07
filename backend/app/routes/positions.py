@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Position, Instrument
+from ..models import Position, Instrument, ManualPosition
 from ..schemas import PositionOut
 
 router = APIRouter()
 
 
-def _to_out(pos: Position, inst: Instrument) -> PositionOut:
+def _to_out(pos: Position, inst: Instrument, manual_id: int | None) -> PositionOut:
     market_value = (pos.quantity * pos.mark_price) if pos.mark_price is not None else None
     pnl_abs: Decimal | None = None
     pnl_pct: float | None = None
@@ -33,6 +33,7 @@ def _to_out(pos: Position, inst: Instrument) -> PositionOut:
         pnl_absolute=pnl_abs,
         pnl_pct=pnl_pct,
         as_of_utc=pos.as_of_utc,
+        manual_position_id=manual_id,
     )
 
 
@@ -50,4 +51,20 @@ async def list_positions(
         q = q.filter(Instrument.asset_type == asset_type)
     if bucket:
         q = q.filter(Instrument.currency_bucket == bucket)
-    return [_to_out(p, i) for p, i in q.all()]
+    rows = q.all()
+
+    # Build (instrument_id, account_label) -> ManualPosition.id map so the UI
+    # can wire delete/edit to the right backing record.
+    manual_id_by_key: dict[tuple[int, str], int] = {}
+    if any(p.source_venue == "manual" for p, _ in rows):
+        for m in db.query(ManualPosition).all():
+            manual_id_by_key[(m.instrument_id, m.account_label)] = m.id
+
+    out: list[PositionOut] = []
+    for p, i in rows:
+        manual_id = (
+            manual_id_by_key.get((p.instrument_id, p.account_label))
+            if p.source_venue == "manual" else None
+        )
+        out.append(_to_out(p, i, manual_id))
+    return out

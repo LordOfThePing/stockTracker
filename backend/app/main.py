@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import overview, positions, connectors, history, refresh, manual, instruments
+from .routes import overview, positions, connectors, history, refresh, manual, instruments, admin
 from .scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -35,6 +35,7 @@ app.include_router(history.router)
 app.include_router(refresh.router)
 app.include_router(manual.router)
 app.include_router(instruments.router)
+app.include_router(admin.router)
 
 
 @app.get("/api/health")

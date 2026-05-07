@@ -1,12 +1,19 @@
-"""Binance Spot adapter (read-only).
+"""Binance adapter (read-only).
 
-Endpoints used (https://binance-docs.github.io/apidocs/spot/en/):
-  - GET /api/v3/time             -- server-time sync, weight 1
-  - GET /api/v3/account          -- spot balances, weight 20, signed
-  - GET /api/v3/ticker/price     -- all prices in one call, weight 4
+Endpoints used:
+  - GET  /api/v3/time
+      https://binance-docs.github.io/apidocs/spot/en/#check-server-time
+  - GET  /api/v3/account                       (signed; Spot balances)
+      https://binance-docs.github.io/apidocs/spot/en/#account-information-user_data
+  - POST /sapi/v1/asset/get-funding-asset      (signed; Funding/"Cripto" wallet)
+      https://developers.binance.com/docs/wallet/asset/funding-wallet
+  - GET  /api/v3/ticker/price                  (public; all prices in one call)
 
-Cost basis is not provided by these endpoints, so manual entries are the only
-way to set cost basis on Binance positions if you want P/L.
+Spot positions get account_label="spot"; Funding positions get account_label="funding".
+Earn/Margin/Futures wallets are NOT covered yet.
+
+Cost basis is not provided by these endpoints, so manual entries remain the only
+way to record cost basis on Binance positions for P/L.
 """
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -17,6 +24,14 @@ from ..config import get_settings
 from ..schemas import NormalizedPosition, ConnectorHealth
 
 logger = logging.getLogger(__name__)
+
+# Fiat currencies Binance supports as wallet assets. Treated as their own quote
+# currency with mark=1 so they land in their own bucket (e.g. ARS, EUR), instead
+# of getting bucketed as USD-stables alongside actual stablecoins.
+_FIAT_CODES = {
+    "ARS", "BRL", "EUR", "GBP", "RUB", "TRY", "UAH", "ZAR",
+    "AUD", "JPY", "MXN", "USD", "RON", "COP", "PEN", "PLN",
+}
 
 
 class BinanceAdapter:
@@ -48,15 +63,34 @@ class BinanceAdapter:
         client = self._client
 
         await client.sync_server_time()
-        account = await client.signed_get("/api/v3/account")
 
-        held: dict[str, Decimal] = {}
+        # (account_label, asset) -> qty
+        held: dict[tuple[str, str], Decimal] = {}
+
+        # Spot wallet
+        account = await client.signed_get("/api/v3/account")
         for b in account.get("balances", []):
             free = Decimal(b.get("free", "0") or "0")
             locked = Decimal(b.get("locked", "0") or "0")
             total = free + locked
             if total > 0:
-                held[b["asset"]] = total
+                held[("spot", b["asset"])] = total
+
+        # Funding ("Cripto") wallet — separate balance pool from Spot
+        try:
+            funding = await client.signed_post("/sapi/v1/asset/get-funding-asset")
+        except Exception as e:
+            logger.warning("Binance funding wallet fetch failed: %s", type(e).__name__)
+            funding = []
+        if isinstance(funding, list):
+            for b in funding:
+                free = Decimal(b.get("free", "0") or "0")
+                locked = Decimal(b.get("locked", "0") or "0")
+                freeze = Decimal(b.get("freeze", "0") or "0")
+                withdrawing = Decimal(b.get("withdrawing", "0") or "0")
+                total = free + locked + freeze + withdrawing
+                if total > 0:
+                    held[("funding", b["asset"])] = total
 
         if not held:
             return []
@@ -64,30 +98,37 @@ class BinanceAdapter:
         all_tickers = await client.public_get("/api/v3/ticker/price")
         price_map: dict[str, Decimal] = {row["symbol"]: Decimal(row["price"]) for row in all_tickers}
 
-        prices: dict[str, Decimal] = {"USDT": Decimal("1")}
-        for asset in held:
-            if asset == "USDT":
-                continue
-            p = price_map.get(f"{asset}USDT")
-            if p is not None:
-                prices[asset] = p
-
         now = datetime.now(timezone.utc)
         out: list[NormalizedPosition] = []
-        for asset, qty in held.items():
-            mark = prices.get(asset)
+        for (label, asset), qty in held.items():
+            if asset == "USDT":
+                quote_currency = "USDT"
+                mark: Decimal | None = Decimal("1")
+                feed_symbol = "USDT"
+                asset_type = "crypto"
+            elif asset in _FIAT_CODES:
+                quote_currency = asset
+                mark = Decimal("1")
+                feed_symbol = asset
+                asset_type = "other"
+            else:
+                quote_currency = "USDT"
+                mark = price_map.get(f"{asset}USDT")
+                feed_symbol = f"{asset}USDT"
+                asset_type = "crypto"
+
             out.append(NormalizedPosition(
                 source_venue=self.venue_id,
-                account_label="spot",
+                account_label=label,
                 symbol=asset,
-                asset_type="crypto",
+                asset_type=asset_type,
                 quantity=qty,
-                quote_currency="USDT",
+                quote_currency=quote_currency,
                 mark_price=mark,
                 cost_basis_per_unit=None,
                 cost_basis_currency=None,
                 price_feed="binance",
-                feed_symbol=f"{asset}USDT" if asset != "USDT" else "USDT",
+                feed_symbol=feed_symbol,
                 as_of_utc=now,
             ))
         return out

@@ -71,6 +71,15 @@ async def patch_manual_position(mp_id: int, body: ManualPositionPatch, db: Sessi
     mp = db.get(ManualPosition, mp_id)
     if mp is None:
         raise HTTPException(status_code=404, detail="not found")
+    if body.account_label is not None:
+        mp.account_label = body.account_label
+    if body.symbol is not None:
+        mp.instrument.symbol = body.symbol
+    if body.asset_type is not None:
+        mp.instrument.asset_type = body.asset_type
+    if body.quote_currency is not None:
+        mp.instrument.quote_currency = body.quote_currency
+        mp.instrument.currency_bucket = bucket_for(body.quote_currency)
     if body.quantity is not None:
         mp.quantity = body.quantity
     if body.cost_basis_per_unit is not None:
