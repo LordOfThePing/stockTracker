@@ -19,6 +19,7 @@ COMPOSE := docker compose
 
 .PHONY: help \
         dev deploy stop down restart logs ps build redeploy \
+        prod prod-down prod-logs prod-redeploy \
         backend-build backend-up backend-stop backend-down \
         backend-restart backend-logs backend-redeploy \
         frontend-build frontend-up frontend-stop frontend-down \
@@ -65,6 +66,23 @@ ps: ## show service status
 	$(COMPOSE) ps
 
 redeploy: down deploy logs ## down → build → up -d → logs (both)
+
+# ============================================================================
+# Production (backend + tunnel, no frontend — frontend is on Cloudflare Pages)
+# ============================================================================
+
+prod: ## build + up -d backend and cloudflared
+	$(COMPOSE) build backend
+	$(COMPOSE) up -d backend cloudflared
+	@echo API running. Tunnel active.
+
+prod-down: ## stop + remove backend and cloudflared
+	$(COMPOSE) down backend cloudflared
+
+prod-logs: ## tail logs from backend and cloudflared
+	$(COMPOSE) logs -f --tail=100 backend cloudflared
+
+prod-redeploy: prod-down prod prod-logs ## down → build → up → logs (prod only)
 
 # ============================================================================
 # Backend only
