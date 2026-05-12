@@ -145,14 +145,14 @@ venv: ## create backend/.venv and install Python deps
 	$(VENV_PIP) install --upgrade pip
 	$(VENV_PIP) install -r backend/requirements.txt
 
-front-install: ## npm install in frontend/
-	cd frontend && npm install
+front-install: ## pnpm install in frontend/
+	cd frontend && pnpm install
 
 backend-dev: ## run backend natively (uvicorn --reload, host 127.0.0.1)
 	cd backend && $(VENV_PY) -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 frontend-dev: ## run frontend natively (next dev, port 3000)
-	cd frontend && npm run dev
+	cd frontend && pnpm run dev
 
 migrate: ## alembic upgrade head (against ./data/tracker.db)
 	cd backend && $(VENV_PY) -m alembic upgrade head
