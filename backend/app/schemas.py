@@ -84,7 +84,7 @@ class BucketSubtotal(BaseModel):
 
 
 class VenueBreakdown(BaseModel):
-    venue: str
+    provider: str
     currency_bucket: str
     total_value: Decimal
 

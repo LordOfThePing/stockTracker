@@ -110,8 +110,11 @@ export default function PositionsPage() {
       const unitCost = num(r.cost_basis_per_unit);
       const marketValue = num(r.market_value);
       const pnlAbs = num(r.pnl_absolute);
-      if (qty !== null && unitCost !== null) cost += qty * unitCost;
-      if (marketValue !== null) value += marketValue;
+      if (marketValue !== null) {
+        value += marketValue;
+        // No cost basis → treat cost = value so it doesn't skew the totals row
+        cost += (qty !== null && unitCost !== null) ? qty * unitCost : marketValue;
+      }
       if (pnlAbs !== null) pnl += pnlAbs;
     }
     const pnlPct = cost > 0 ? pnl / cost : null;

@@ -21,7 +21,7 @@ async def get_overview(db: Session = Depends(get_db)) -> OverviewOut:
 
     bucket_total: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     bucket_count: dict[str, int] = defaultdict(int)
-    venue_total: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal(0))
+    provider_total: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal(0))
 
     for pos, inst in rows:
         bucket_count[inst.currency_bucket] += 1
@@ -29,15 +29,17 @@ async def get_overview(db: Session = Depends(get_db)) -> OverviewOut:
             continue
         mv = pos.quantity * pos.mark_price
         bucket_total[inst.currency_bucket] += mv
-        venue_total[(pos.source_venue, inst.currency_bucket)] += mv
+        label = pos.account_label or pos.source_venue
+        label = label.split("::")[-1] if "::" in label else label
+        provider_total[(label, inst.currency_bucket)] += mv
 
     buckets = [
         BucketSubtotal(currency_bucket=b, total_value=bucket_total[b], position_count=bucket_count[b])
         for b in sorted(bucket_count.keys())
     ]
     by_venue = [
-        VenueBreakdown(venue=v, currency_bucket=b, total_value=t)
-        for (v, b), t in sorted(venue_total.items())
+        VenueBreakdown(provider=p, currency_bucket=b, total_value=t)
+        for (p, b), t in sorted(provider_total.items())
     ]
 
     connectors: list[ConnectorHealth] = []
