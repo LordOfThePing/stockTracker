@@ -29,8 +29,14 @@ async def get_overview(db: Session = Depends(get_db)) -> OverviewOut:
             continue
         mv = pos.quantity * pos.mark_price
         bucket_total[inst.currency_bucket] += mv
-        label = pos.account_label or pos.source_venue
-        label = label.split("::")[-1] if "::" in label else label
+        raw = pos.account_label or pos.source_venue
+        if "::" in raw:
+            sub = raw.split("::")[-1]
+            label = "Binance Web3" if sub == "binance" else sub
+        elif pos.source_venue == "binance":
+            label = f"Binance {raw.capitalize()}"
+        else:
+            label = raw
         provider_total[(label, inst.currency_bucket)] += mv
 
     buckets = [

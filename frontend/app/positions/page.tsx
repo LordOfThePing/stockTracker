@@ -17,16 +17,14 @@ function pct(p: number | null) {
 }
 
 function providerFromLabel(r: Position) {
-  if (r.source_venue !== "manual") {
-    return r.source_venue;
+  if (r.source_venue === "binance") {
+    return `Binance ${r.account_label.charAt(0).toUpperCase()}${r.account_label.slice(1)}`;
   }
   const raw = (r.account_label ?? "").trim();
-  if (!raw || raw === "manual") {
-    return "manual";
-  }
-  const parts = raw.split("::");
-  if (parts.length === 2) {
-    return parts[1].trim() || parts[0].trim() || "manual";
+  if (!raw || raw === "manual") return "manual";
+  if (raw.includes("::")) {
+    const sub = raw.split("::")[1].trim();
+    return sub === "binance" ? "Binance Web3" : sub || raw;
   }
   return raw;
 }
