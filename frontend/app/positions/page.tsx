@@ -234,12 +234,12 @@ export default function PositionsPage() {
             })}
             {visible.length > 0 && (
               <tr className="font-mono bg-ink-50/60 border-t border-ink-200 whitespace-nowrap">
-                <td className="px-3 py-2 text-ink-700" colSpan={6}>Totals</td>
+                <td className="px-3 py-2 text-ink-700" colSpan={7}>Totals</td>
                 <td className="px-3 py-2 text-right">{fmt(totals.cost)}</td>
                 <td className="px-3 py-2 text-right">{fmt(totals.value)}</td>
                 <td className={`px-3 py-2 text-right ${totals.pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>{fmt(totals.pnl)}</td>
                 <td className={`px-3 py-2 text-right ${totals.pnlPct === null ? "" : totals.pnlPct >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pct(totals.pnlPct)}</td>
-                <td className="px-3 py-2"></td>
+                <td className="px-3 py-2 text-right"></td>
               </tr>
             )}
             {visible.length === 0 && (
