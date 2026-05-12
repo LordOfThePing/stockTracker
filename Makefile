@@ -1,5 +1,5 @@
-## Tracker — local-only personal portfolio tracker.
-## Targets group into: docker stack, native dev, tests, tools.
+## Tracker — personal portfolio tracker.
+## Targets group into: full stack, backend-only, frontend-only, native dev, tests, tools.
 
 ROOT := $(abspath $(CURDIR))
 
@@ -18,36 +18,41 @@ COMPOSE := docker compose
 .DEFAULT_GOAL := help
 
 .PHONY: help \
-        dev deploy stop down restart logs ps build \
+        dev deploy stop down restart logs ps build redeploy \
+        backend-build backend-up backend-stop backend-down \
+        backend-restart backend-logs backend-redeploy \
+        frontend-build frontend-up frontend-stop frontend-down \
+        frontend-restart frontend-logs frontend-redeploy \
         setup venv front-install \
         backend-dev frontend-dev migrate \
         test test-watch \
         refresh refresh-binance refresh-manual keys-check \
+        purge-mock purge-venue \
         clean clean-data
 
 help: ## Show this help
 	@echo Tracker - make targets:
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ============================================================================
-# Docker stack — primary path; binds services to 127.0.0.1 only.
+# Full stack (backend + frontend)
 # ============================================================================
 
-dev: ## docker compose up --build (foreground, follows logs)
+dev: ## up --build foreground (both services)
 	$(COMPOSE) up --build
 
-deploy: ## docker compose build + up -d (background; still localhost-only)
+deploy: ## build + up -d (both services, background)
 	$(COMPOSE) build
 	$(COMPOSE) up -d
 	@echo Tracker running. UI http://127.0.0.1:3000  --  API http://127.0.0.1:8000/docs
 
-build: ## (re)build images without starting
+build: ## (re)build both images without starting
 	$(COMPOSE) build
 
-stop: ## docker compose stop (keep containers)
+stop: ## stop both services (keep containers)
 	$(COMPOSE) stop
 
-down: ## docker compose down (stop + remove containers)
+down: ## stop + remove both containers
 	$(COMPOSE) down
 
 restart: ## restart both services
@@ -59,10 +64,60 @@ logs: ## tail logs from both services
 ps: ## show service status
 	$(COMPOSE) ps
 
-redeploy: down deploy logs
+redeploy: down deploy logs ## down → build → up -d → logs (both)
 
 # ============================================================================
-# Native dev (alternate path; runs uvicorn + next dev outside Docker).
+# Backend only
+# ============================================================================
+
+backend-build: ## (re)build backend image without starting
+	$(COMPOSE) build backend
+
+backend-up: ## start backend container (build if needed)
+	$(COMPOSE) up -d --build backend
+	@echo API http://127.0.0.1:8000/docs
+
+backend-stop: ## stop backend container (keep it)
+	$(COMPOSE) stop backend
+
+backend-down: ## stop + remove backend container
+	$(COMPOSE) down backend
+
+backend-restart: ## restart backend container
+	$(COMPOSE) restart backend
+
+backend-logs: ## tail backend logs
+	$(COMPOSE) logs -f --tail=100 backend
+
+backend-redeploy: backend-down backend-up backend-logs ## down → build → up → logs (backend only)
+
+# ============================================================================
+# Frontend only
+# ============================================================================
+
+frontend-build: ## (re)build frontend image without starting
+	$(COMPOSE) build frontend
+
+frontend-up: ## start frontend container (build if needed)
+	$(COMPOSE) up -d --build frontend
+	@echo UI http://127.0.0.1:3000
+
+frontend-stop: ## stop frontend container (keep it)
+	$(COMPOSE) stop frontend
+
+frontend-down: ## stop + remove frontend container
+	$(COMPOSE) down frontend
+
+frontend-restart: ## restart frontend container
+	$(COMPOSE) restart frontend
+
+frontend-logs: ## tail frontend logs
+	$(COMPOSE) logs -f --tail=100 frontend
+
+frontend-redeploy: frontend-down frontend-up frontend-logs ## down → build → up → logs (frontend only)
+
+# ============================================================================
+# Native dev (runs uvicorn + next dev outside Docker)
 # ============================================================================
 
 setup: venv front-install migrate ## one-shot: venv + npm install + first migration
@@ -110,7 +165,7 @@ refresh-manual: ## POST /api/refresh/manual
 keys-check: ## report whether Binance keys are configured (NEVER prints values)
 	@cd backend && $(VENV_PY) -c "from app.config import get_settings; print('binance_enabled:', get_settings().binance_enabled)"
 
-purge-mock: ## delete all mock-sourced positions/accounts/sync_runs from the DB
+purge-mock: ## delete all mock-sourced positions from the DB
 	curl -fsS -X DELETE http://127.0.0.1:8000/api/admin/venue/mock && echo
 
 purge-venue: ## delete all rows for VENUE=<name> (e.g. make purge-venue VENUE=mock)
@@ -127,6 +182,7 @@ clean: ## remove venv, node_modules, build artifacts (keeps data/)
 	-$(RM_RF) "backend/__pycache__"
 	-$(RM_RF) "frontend/node_modules"
 	-$(RM_RF) "frontend/.next"
+	-$(RM_RF) "frontend/out"
 
 clean-data: ## DESTRUCTIVE: also delete data/ (SQLite DB + history)
 	-$(RM_RF) "data"
