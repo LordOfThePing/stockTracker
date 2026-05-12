@@ -40,12 +40,13 @@ export default function OverviewPage() {
       </section>
 
       <section>
-        <h2 className="text-sm uppercase tracking-wide text-ink-500 mb-3">By provider</h2>
+        <h2 className="text-sm uppercase tracking-wide text-ink-500 mb-3">By account</h2>
         <div className="rounded border border-ink-200 bg-white">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-ink-500 border-b border-ink-200">
-                <th className="px-4 py-2 font-medium">Provider</th>
+                <th className="px-4 py-2 font-medium">Source</th>
+                <th className="px-4 py-2 font-medium">Account</th>
                 <th className="px-4 py-2 font-medium">Bucket</th>
                 <th className="px-4 py-2 font-medium text-right">Total</th>
               </tr>
@@ -53,7 +54,8 @@ export default function OverviewPage() {
             <tbody>
               {data.by_venue.map((v, i) => (
                 <tr key={i} className="border-b border-ink-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">{v.provider}</td>
+                  <td className="px-4 py-2 font-mono">{v.source_venue}</td>
+                  <td className="px-4 py-2 font-mono text-ink-500">{v.account_label}</td>
                   <td className="px-4 py-2 font-mono text-ink-500">{v.currency_bucket}</td>
                   <td className="px-4 py-2 font-mono text-right">{fmt(v.total_value)}</td>
                 </tr>

@@ -15,7 +15,8 @@ export type BucketSubtotal = {
 };
 
 export type VenueBreakdown = {
-  provider: string;
+  source_venue: string;
+  account_label: string;
   currency_bucket: string;
   total_value: string;
 };

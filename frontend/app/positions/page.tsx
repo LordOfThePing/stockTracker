@@ -16,26 +16,6 @@ function pct(p: number | null) {
   return `${(p * 100).toFixed(2)}%`;
 }
 
-function providerFromLabel(r: Position) {
-  if (r.source_venue === "binance") {
-    return `Binance ${r.account_label.charAt(0).toUpperCase()}${r.account_label.slice(1)}`;
-  }
-  const raw = (r.account_label ?? "").trim();
-  if (!raw || raw === "manual") return "manual";
-  if (raw.includes("::")) {
-    const sub = raw.split("::")[1].trim();
-    return sub === "binance" ? "Binance Web3" : sub || raw;
-  }
-  return raw;
-}
-
-function packProvider(provider: string) {
-  return provider.trim() || "manual";
-}
-
-function providerLabel(r: Position) {
-  return providerFromLabel(r);
-}
 
 function num(v: string | number | null) {
   if (v === null) return null;
@@ -93,7 +73,8 @@ export default function PositionsPage() {
     if (!f) return rows;
     return rows.filter((r) =>
       r.symbol.toLowerCase().includes(f) ||
-      providerLabel(r).toLowerCase().includes(f) ||
+      r.source_venue.toLowerCase().includes(f) ||
+      r.account_label.toLowerCase().includes(f) ||
       r.asset_type.toLowerCase().includes(f) ||
       r.currency_bucket.toLowerCase().includes(f)
     );
@@ -145,7 +126,7 @@ export default function PositionsPage() {
     if (!r.manual_position_id) return;
     setEditing({
       manualId: r.manual_position_id,
-      provider: providerFromLabel(r),
+      provider: r.account_label,
       symbol: r.symbol,
       assetType: r.asset_type,
       quoteCurrency: r.quote_currency,
@@ -161,7 +142,7 @@ export default function PositionsPage() {
     setBusy(true);
     try {
       await api.patchManual(editing.manualId, {
-        account_label: packProvider(editing.provider),
+        account_label: editing.provider,
         symbol: editing.symbol,
         asset_type: editing.assetType,
         quote_currency: editing.quoteCurrency,
@@ -205,7 +186,8 @@ export default function PositionsPage() {
           <thead>
             <tr className="text-left text-ink-500 border-b border-ink-200">
               <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="px-3 py-2 font-medium">Provider</th>
+              <th className="px-3 py-2 font-medium">Source</th>
+              <th className="px-3 py-2 font-medium">Account</th>
               <th className="px-3 py-2 font-medium">Asset Type</th>
               <th className="px-3 py-2 font-medium">Bucket</th>
               <th className="px-3 py-2 font-medium text-right">Qty</th>
@@ -225,7 +207,8 @@ export default function PositionsPage() {
               return (
                 <tr key={`${r.source_venue}-${r.id}`} className="border-b border-ink-100 last:border-0 font-mono">
                   <td className="px-3 py-2">{r.symbol}</td>
-                  <td className="px-3 py-2 text-ink-500">{providerLabel(r)}</td>
+                  <td className="px-3 py-2 text-ink-500">{r.source_venue}</td>
+                  <td className="px-3 py-2 text-ink-500">{r.account_label}</td>
                   <td className="px-3 py-2 text-ink-500">{r.asset_type}</td>
                   <td className="px-3 py-2 text-ink-500">{r.currency_bucket}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.quantity)}</td>

@@ -21,7 +21,7 @@ async def get_overview(db: Session = Depends(get_db)) -> OverviewOut:
 
     bucket_total: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     bucket_count: dict[str, int] = defaultdict(int)
-    provider_total: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal(0))
+    account_total: dict[tuple[str, str, str], Decimal] = defaultdict(lambda: Decimal(0))
 
     for pos, inst in rows:
         bucket_count[inst.currency_bucket] += 1
@@ -29,23 +29,15 @@ async def get_overview(db: Session = Depends(get_db)) -> OverviewOut:
             continue
         mv = pos.quantity * pos.mark_price
         bucket_total[inst.currency_bucket] += mv
-        raw = pos.account_label or pos.source_venue
-        if "::" in raw:
-            sub = raw.split("::")[-1]
-            label = "Binance Web3" if sub == "binance" else sub
-        elif pos.source_venue == "binance":
-            label = f"Binance {raw.capitalize()}"
-        else:
-            label = raw
-        provider_total[(label, inst.currency_bucket)] += mv
+        account_total[(pos.source_venue, pos.account_label, inst.currency_bucket)] += mv
 
     buckets = [
         BucketSubtotal(currency_bucket=b, total_value=bucket_total[b], position_count=bucket_count[b])
         for b in sorted(bucket_count.keys())
     ]
     by_venue = [
-        VenueBreakdown(provider=p, currency_bucket=b, total_value=t)
-        for (p, b), t in sorted(provider_total.items())
+        VenueBreakdown(source_venue=s, account_label=a, currency_bucket=b, total_value=t)
+        for (s, a, b), t in sorted(account_total.items())
     ]
 
     connectors: list[ConnectorHealth] = []
