@@ -11,7 +11,7 @@ Personal-use, **localhost-only** portfolio tracker. Crypto via Binance (read-onl
 - Everything binds to `127.0.0.1`. No cloud deployment.
 
 ## Quick start (Docker)
-
+ 
 ```powershell
 copy .env.example .env
 # (Optional, Phase 2) edit .env and add your read-only Binance API key + secret
