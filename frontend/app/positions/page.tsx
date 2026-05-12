@@ -182,9 +182,9 @@ export default function PositionsPage() {
       </div>
 
       <div className="rounded border border-ink-200 bg-white overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="min-w-full text-sm">
           <thead>
-            <tr className="text-left text-ink-500 border-b border-ink-200">
+            <tr className="text-left text-ink-500 border-b border-ink-200 whitespace-nowrap">
               <th className="px-3 py-2 font-medium">Symbol</th>
               <th className="px-3 py-2 font-medium">Source</th>
               <th className="px-3 py-2 font-medium">Account</th>
@@ -205,10 +205,12 @@ export default function PositionsPage() {
               const pnlClass = pnl === null ? "" : pnl >= 0 ? "text-emerald-700" : "text-red-700";
               const isManual = r.source_venue === "manual" && r.manual_position_id !== null;
               return (
-                <tr key={`${r.source_venue}-${r.id}`} className="border-b border-ink-100 last:border-0 font-mono">
+                <tr key={`${r.source_venue}-${r.id}`} className="border-b border-ink-100 last:border-0 font-mono whitespace-nowrap">
                   <td className="px-3 py-2">{r.symbol}</td>
                   <td className="px-3 py-2 text-ink-500">{r.source_venue}</td>
-                  <td className="px-3 py-2 text-ink-500">{r.account_label}</td>
+                  <td className="px-3 py-2 text-ink-500 max-w-[10rem]">
+                    <span className="block truncate" title={r.account_label}>{r.account_label}</span>
+                  </td>
                   <td className="px-3 py-2 text-ink-500">{r.asset_type}</td>
                   <td className="px-3 py-2 text-ink-500">{r.currency_bucket}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.quantity)}</td>
@@ -231,7 +233,7 @@ export default function PositionsPage() {
               );
             })}
             {visible.length > 0 && (
-              <tr className="font-mono bg-ink-50/60 border-t border-ink-200">
+              <tr className="font-mono bg-ink-50/60 border-t border-ink-200 whitespace-nowrap">
                 <td className="px-3 py-2 text-ink-700" colSpan={6}>Totals</td>
                 <td className="px-3 py-2 text-right">{fmt(totals.cost)}</td>
                 <td className="px-3 py-2 text-right">{fmt(totals.value)}</td>
